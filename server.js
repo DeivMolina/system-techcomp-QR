@@ -78,7 +78,7 @@ app.post('/login', (req, res) => {
                 if (response) {
                     const name = data[0].name;
                     const token = jwt.sign({ name }, "jwt-secret-key", { expiresIn: '1d' });
-                    res.cookie('token', token, { httpOnly: true, sameSite: 'Lax' });
+                    res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true });
                     return res.json({ Status: "Exito" });
                 } else {
                     return res.json({ Error: "Contraseña Incorrecta" });
