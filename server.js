@@ -11,7 +11,6 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
-
 const salt = 10;
 
 const app = express();
@@ -63,12 +62,19 @@ const verifyUser = (req, res, next) => {
                 req.userId = decoded.id;
                 req.userType = decoded.type;
                 if (req.userType === 'user' && req.path === '/') {
-                    return res.redirect('/report'); 
+                    return res.redirect('/report');
                 }
                 next();
             }
         });
     }
+};
+
+const verifyAdmin = (req, res, next) => {
+    if (req.userType !== 'admin') {
+        return res.status(403).json({ Error: "Acceso denegado" });
+    }
+    next();
 };
 
 // Acceso de usuario
@@ -80,8 +86,9 @@ app.post('/login', (req, res) => {
             bcrypt.compare(req.body.password.toString(), data[0].password, (err, response) => {
                 if (err) return res.json({ Error: "Error de contraseña" });
                 if (response) {
-                    const name = data[0].name;
-                    const token = jwt.sign({ name }, "jwt-secret-key", { expiresIn: '1d' });
+                    const id = data[0].id;
+                    const type = data[0].type;
+                    const token = jwt.sign({ id, type }, "jwt-secret-key", { expiresIn: '1d' });
                     res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true });
                     return res.json({ Status: "Exito" });
                 } else {
@@ -95,18 +102,19 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/', verifyUser, (req, res) => {
-    return res.json({ Status: "Exito", name: req.name });
+    return res.json({ Status: "Exito", userType: req.userType });
 });
 
 // Registro de usuario
 app.post('/register', (req, res) => {
-    const sql = "INSERT INTO login (name, email, password) VALUES (?)";
+    const sql = "INSERT INTO login (name, email, password, type) VALUES (?)";
     bcrypt.hash(req.body.password.toString(), salt, (err, hash) => {
         if (err) return res.json({ Error: "Error cifrar contraseña" });
         const values = [
             req.body.name,
             req.body.email,
-            hash
+            hash,
+            req.body.type || 'user' // Asigna 'user' por defecto si no se especifica el tipo
         ];
         db.query(sql, [values], (err, result) => {
             if (err) return res.json({ Error: "Insertar datos en el servidor" });
