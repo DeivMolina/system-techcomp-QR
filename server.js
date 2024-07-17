@@ -38,12 +38,12 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Conexión a la base de datos
+// Conexión a la base de datos utilizando variables de entorno
 const db = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "",
-    database: 'techcomp'
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
 });
 
 // Verificación de usuario-token-cookies
@@ -107,8 +107,6 @@ app.post('/register', (req, res) => {
     });
 });
 
-
-
 // Cierre de sesión
 app.get('/logout', (req, res) => {
     res.clearCookie('token');
@@ -152,9 +150,8 @@ app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) =>
 // Servir archivos estáticos desde la carpeta 'uploads'
 app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
 
-
 // Puerto del servidor
-app.listen(8081, () => {
-    console.log("Corriendo en http://localhost:8081");
+const PORT = process.env.PORT || 8081;
+app.listen(PORT, () => {
+    console.log(`Corriendo en http://localhost:${PORT}`);
 });
-
