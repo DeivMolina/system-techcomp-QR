@@ -16,7 +16,7 @@ const salt = 10;
 const app = express();
 app.use(express.json());
 app.use(cors({
-    origin: ["http://localhost:3000", "https://app-techcomp-16ff4d30c364.herokuapp.com"],
+    origin: ["http://localhost:3000", "https://g5l5ncz9-3000.usw3.devtunnels.ms", "https://app-techcomp-16ff4d30c364.herokuapp.com"],
     methods: ["POST", "GET"],
     credentials: true
 }));
