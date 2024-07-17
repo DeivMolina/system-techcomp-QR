@@ -11,7 +11,6 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
-
 const salt = 10;
 
 const app = express();
@@ -23,13 +22,11 @@ app.use(cors({
 }));
 app.use(cookieParser());
 
-// Asegúrate de que la carpeta 'uploads' exista
 const uploadDir = path.join(path.resolve(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
 }
 
-// Configuración de Multer para la subida de archivos
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, 'uploads/');
@@ -42,7 +39,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Conexión a la base de datos
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -50,7 +46,6 @@ const db = mysql.createConnection({
     database: process.env.DB_DATABASE
 });
 
-// Verificación de usuario-token-cookies
 const verifyUser = (req, res, next) => {
     const token = req.cookies.token;
     if (!token) {
@@ -61,6 +56,7 @@ const verifyUser = (req, res, next) => {
                 return res.status(401).json({ Error: "Token no es correcto" });
             } else {
                 req.userId = decoded.id;
+                req.userName = decoded.name;
                 req.userType = decoded.type;
                 next();
             }
@@ -68,7 +64,6 @@ const verifyUser = (req, res, next) => {
     }
 };
 
-// Acceso de usuario
 app.post('/login', (req, res) => {
     const sql = 'SELECT * FROM login WHERE email = ?';
     db.query(sql, [req.body.email], (err, data) => {
@@ -77,10 +72,10 @@ app.post('/login', (req, res) => {
             bcrypt.compare(req.body.password.toString(), data[0].password, (err, response) => {
                 if (err) return res.json({ Error: "Error de contraseña" });
                 if (response) {
-                    const { id, type } = data[0];
-                    const token = jwt.sign({ id, type }, "jwt-secret-key", { expiresIn: '1d' });
+                    const user = data[0];
+                    const token = jwt.sign({ id: user.id, name: user.name, type: user.type }, "jwt-secret-key", { expiresIn: '1d' });
                     res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true });
-                    return res.json({ Status: "Exito", token });
+                    return res.json({ Status: "Exito", name: user.name, type: user.type, token });
                 } else {
                     return res.json({ Error: "Contraseña Incorrecta" });
                 }
@@ -92,18 +87,18 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/', verifyUser, (req, res) => {
-    return res.json({ Status: "Exito", userType: req.userType });
+    return res.json({ Status: "Exito", name: req.userName, type: req.userType });
 });
 
-// Registro de usuario
 app.post('/register', (req, res) => {
-    const sql = "INSERT INTO login (name, email, password) VALUES (?)";
+    const sql = "INSERT INTO login (name, email, password, type) VALUES (?)";
     bcrypt.hash(req.body.password.toString(), salt, (err, hash) => {
         if (err) return res.json({ Error: "Error cifrar contraseña" });
         const values = [
             req.body.name,
             req.body.email,
-            hash
+            hash,
+            req.body.type // Asegúrate de que el tipo de usuario se envíe en la solicitud de registro
         ];
         db.query(sql, [values], (err, result) => {
             if (err) return res.json({ Error: "Insertar datos en el servidor" });
@@ -112,13 +107,11 @@ app.post('/register', (req, res) => {
     });
 });
 
-// Cierre de sesión
 app.get('/logout', (req, res) => {
     res.clearCookie('token');
     return res.json({ Status: "Exito" });
 });
 
-// Ruta para obtener el reporte por SKU
 app.get('/report/:sku', verifyUser, (req, res) => {
     const sku = req.params.sku;
     const sql = 'SELECT * FROM reports WHERE sku = ?';
@@ -132,7 +125,6 @@ app.get('/report/:sku', verifyUser, (req, res) => {
     });
 });
 
-// Ruta para subir el archivo
 app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) => {
     const sku = req.params.sku;
     const file = req.file;
@@ -152,10 +144,8 @@ app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) =>
     });
 });
 
-// Servir archivos estáticos desde la carpeta 'uploads'
 app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
 
-// Puerto del servidor
 const PORT = process.env.PORT || 8081;
 app.listen(PORT, () => {
     console.log(`Servidor levantado en ${PORT}`);
