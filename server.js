@@ -38,7 +38,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Conexión a la base de datos utilizando variables de entorno
+// Conexión a la base de datos
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -153,5 +153,5 @@ app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
 // Puerto del servidor
 const PORT = process.env.PORT || 8081;
 app.listen(PORT, () => {
-    console.log(`Corriendo en http://localhost:${PORT}`);
+    console.log(`Servidor levantado en ${PORT}`);
 });
