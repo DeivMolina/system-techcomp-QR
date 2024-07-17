@@ -102,6 +102,9 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/', verifyUser, (req, res) => {
+    if (req.userType !== 'admin') {
+        return res.status(403).json({ Error: "Acceso denegado" });
+    }
     return res.json({ Status: "Exito", userType: req.userType });
 });
 
@@ -114,7 +117,7 @@ app.post('/register', (req, res) => {
             req.body.name,
             req.body.email,
             hash,
-            req.body.type || 'user' // Asigna 'user' por defecto si no se especifica el tipo
+            req.body.type // Se espera que el tipo de usuario (admin/user) se envíe en la solicitud de registro
         ];
         db.query(sql, [values], (err, result) => {
             if (err) return res.json({ Error: "Insertar datos en el servidor" });
