@@ -40,10 +40,10 @@ const upload = multer({ storage });
 
 // Conexión a la base de datos
 const db = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
+    host: "u3r5w4ayhxzdrw87.cbetxkdyhwsb.us-east-1.rds.amazonaws.com",
+    user: "jqlc592yn41ky86c",
+    password: "du9ucvt1o67pup8h",
+    database: "c3k1k9oqytw978o"
 });
 
 // Verificación de usuario-token-cookies
