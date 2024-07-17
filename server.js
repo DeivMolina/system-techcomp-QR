@@ -60,7 +60,11 @@ const verifyUser = (req, res, next) => {
             if (err) {
                 return res.status(401).json({ Error: "Token no es correcto" });
             } else {
-                req.name = decoded.name;
+                req.userId = decoded.id;
+                req.userType = decoded.type;
+                if (req.userType === 'user' && req.path === '/') {
+                    return res.redirect('/report'); 
+                }
                 next();
             }
         });
