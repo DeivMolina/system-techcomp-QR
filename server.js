@@ -127,24 +127,29 @@ app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) =>
     const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1, user_id = ? WHERE sku = ?';
 
     // Actualizar la base de datos primero
+    console.log("Actualizando la base de datos...");
     db.query(sql, [filename, userId, sku], (err, result) => {
         if (err) {
             console.log("Error al actualizar la base de datos", err);
             return res.json({ Error: "Error al actualizar la base de datos" });
         }
 
+        console.log("Base de datos actualizada correctamente");
+        
         // Subir la imagen al servidor externo
         const formData = new FormData();
         formData.append('file', file.buffer, filename);
 
+        console.log("Subiendo la imagen al servidor externo...");
         axios.post('https://front-techcomp.rkcreativo.com.mx/upload.php', formData, {
             headers: {
                 ...formData.getHeaders()
             }
         })
         .then(response => {
+            console.log("Respuesta del servidor externo:", response.data);
             if (response.data.status === 'success') {
-                const imageUrl = response.data.url; 
+                const imageUrl = response.data.url; // Assuming the response contains the URL of the uploaded file
 
                 // Actualizar la base de datos con la URL de la imagen
                 const sqlUpdate = 'UPDATE reports SET image_name = ?, image_uploaded = 1 WHERE sku = ?';
@@ -153,7 +158,7 @@ app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) =>
                         console.log("Error al actualizar la URL de la imagen en la base de datos", err);
                         return res.json({ Error: "Error al actualizar la URL de la imagen en la base de datos" });
                     }
-                    console.log("Archivo subido y base de datos actualizada correctamente");
+                    console.log("URL de la imagen actualizada en la base de datos correctamente");
                     return res.json({ Status: "Exito", filename: imageUrl });
                 });
             } else {
