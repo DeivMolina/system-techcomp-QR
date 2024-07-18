@@ -8,7 +8,6 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
-import axios from 'axios';
 import path from 'path';
 import fs from 'fs';
 
@@ -19,12 +18,25 @@ app.use(express.json());
 app.use(cors({
     origin: ["http://localhost:3000", "https://app-techcomp-16ff4d30c364.herokuapp.com", "https://front-techcomp.rkcreativo.com.mx"],
     methods: ["POST", "GET"],
-    allowedHeaders: ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
     credentials: true
 }));
 app.use(cookieParser());
 
-const storage = multer.memoryStorage();  // Almacenamiento en memoria para multer
+const uploadDir = path.join(path.resolve(), 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        const sku = req.params.sku;
+        cb(null, `${sku}-${file.originalname}`);
+    }
+});
+
 const upload = multer({ storage });
 
 const db = mysql.createConnection({
@@ -86,7 +98,7 @@ app.post('/register', (req, res) => {
             req.body.name,
             req.body.email,
             hash,
-            req.body.type
+            req.body.type // Asegúrate de que el tipo de usuario se envíe en la solicitud de registro
         ];
         db.query(sql, values, (err, result) => {
             if (err) return res.json({ Error: "Insertar datos en el servidor" });
@@ -113,50 +125,28 @@ app.get('/report/:sku', verifyUser, (req, res) => {
     });
 });
 
-app.post('/report/upload/:sku', verifyUser, upload.single('file'), async (req, res) => {
+app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) => {
     const sku = req.params.sku;
     const file = req.file;
+    const userId = req.userId; // ID del usuario autenticado
 
     if (!file) {
+        console.log("No se subió ningún archivo");
         return res.json({ Error: "Por favor seleccione un archivo" });
     }
 
-    try {
-        // Log para verificar si se entra en el bloque try
-        console.log('Intentando subir el archivo...');
-
-        // Subir archivo a servidor remoto
-        const formData = new FormData();
-        formData.append('file', file.buffer, file.originalname);
-
-        // Log para verificar los datos del archivo
-        console.log('Datos del archivo:', file);
-
-        const uploadResponse = await axios.post('https://front-techcomp.rkcreativo.com.mx/upload', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data'
-            }
-        });
-
-        // Log para verificar la respuesta del servidor remoto
-        console.log('Respuesta del servidor remoto:', uploadResponse.data);
-
-        // Actualizar base de datos con la información del archivo subido
-        const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1 WHERE sku = ?';
-        db.query(sql, [file.originalname, sku], (err, result) => {
-            if (err) {
-                return res.json({ Error: "Error al subir el archivo" });
-            }
-            return res.json({ Status: "Exito", filename: file.originalname });
-        });
-    } catch (error) {
-        // Log para capturar errores
-        console.error('Error al subir el archivo al servidor remoto:', error);
-        res.json({ Error: "Error al subir el archivo al servidor remoto" });
-    }
+    const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1, user_id = ? WHERE sku = ?';
+    db.query(sql, [file.filename, userId, sku], (err, result) => {
+        if (err) {
+            console.log("Error al subir el archivo", err);
+            return res.json({ Error: "Error al subir el archivo" });
+        }
+        console.log("Archivo subido y base de datos actualizada correctamente");
+        return res.json({ Status: "Exito", filename: file.filename });
+    });
 });
 
-app.use('/upload', express.static(path.join(path.resolve(), 'uploads')));
+app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
 
 app.get('/admin/reports', verifyUser, (req, res) => {
     if (req.userType !== 'admin') {
