@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
+import axios from 'axios';
 import path from 'path';
 import fs from 'fs';
 
@@ -22,21 +23,7 @@ app.use(cors({
 }));
 app.use(cookieParser());
 
-const uploadDir = path.join(path.resolve(), 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-}
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        const sku = req.params.sku;
-        cb(null, `${sku}-${file.originalname}`);
-    }
-});
-
+const storage = multer.memoryStorage();  // Almacenamiento en memoria para multer
 const upload = multer({ storage });
 
 const db = mysql.createConnection({
@@ -125,25 +112,37 @@ app.get('/report/:sku', verifyUser, (req, res) => {
     });
 });
 
-app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) => {
+app.post('/report/upload/:sku', verifyUser, upload.single('file'), async (req, res) => {
     const sku = req.params.sku;
     const file = req.file;
-    const userId = req.userId; // ID del usuario autenticado
 
     if (!file) {
-        console.log("No se subió ningún archivo");
         return res.json({ Error: "Por favor seleccione un archivo" });
     }
 
-    const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1, user_id = ? WHERE sku = ?';
-    db.query(sql, [file.filename, userId, sku], (err, result) => {
-        if (err) {
-            console.log("Error al subir el archivo", err);
-            return res.json({ Error: "Error al subir el archivo" });
-        }
-        console.log("Archivo subido y base de datos actualizada correctamente");
-        return res.json({ Status: "Exito", filename: file.filename });
-    });
+    try {
+        // Subir archivo a servidor remoto
+        const formData = new FormData();
+        formData.append('file', file.buffer, file.originalname);
+
+        const uploadResponse = await axios.post('https://front-techcomp.rkcreativo.com.mx/uploads', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+
+        // Actualizar base de datos con la información del archivo subido
+        const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1 WHERE sku = ?';
+        db.query(sql, [file.originalname, sku], (err, result) => {
+            if (err) {
+                return res.json({ Error: "Error al subir el archivo" });
+            }
+            return res.json({ Status: "Exito", filename: file.originalname });
+        });
+    } catch (error) {
+        console.error(error);
+        res.json({ Error: "Error al subir el archivo al servidor remoto" });
+    }
 });
 
 app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
