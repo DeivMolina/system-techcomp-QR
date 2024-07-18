@@ -148,17 +148,26 @@ app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) =>
 
 app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
 
-app.get('/admin/data', verifyUser, (req, res) => {
+app.get('/admin/reports', verifyUser, (req, res) => {
+    if (req.userType !== 'admin') {
+        return res.status(403).json({ Error: "Acceso denegado" });
+    }
+
     const sql = `
-        SELECT login.name, login.email, login.type, reports.sku, reports.upload_date
-        FROM login
-        LEFT JOIN reports ON login.id = reports.user_id
+        SELECT r.sku, r.upload_date, l.name, l.email, l.type 
+        FROM reports r 
+        JOIN login l ON r.user_id = l.id
     `;
+
     db.query(sql, (err, data) => {
-        if (err) return res.status(500).json({ Error: "Error al obtener los datos" });
+        if (err) {
+            console.log("Error al obtener los datos", err);
+            return res.json({ Error: "Error al obtener los datos" });
+        }
         return res.json({ Status: "Exito", Data: data });
     });
 });
+
 
 const PORT = process.env.PORT || 8081;
 app.listen(PORT, () => {
