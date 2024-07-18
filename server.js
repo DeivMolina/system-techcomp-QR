@@ -125,7 +125,7 @@ app.post('/report/upload/:sku', verifyUser, upload.single('file'), async (req, r
         const formData = new FormData();
         formData.append('file', file.buffer, file.originalname);
 
-        const uploadResponse = await axios.post('https://front-techcomp.rkcreativo.com.mx/uploads', formData, {
+        const uploadResponse = await axios.post('https://front-techcomp.rkcreativo.com.mx/upload', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
             }
@@ -145,7 +145,7 @@ app.post('/report/upload/:sku', verifyUser, upload.single('file'), async (req, r
     }
 });
 
-app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
+app.use('/upload', express.static(path.join(path.resolve(), 'uploads')));
 
 app.get('/admin/reports', verifyUser, (req, res) => {
     if (req.userType !== 'admin') {
