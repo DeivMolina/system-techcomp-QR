@@ -123,30 +123,47 @@ app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) =>
         return res.json({ Error: "Por favor seleccione un archivo" });
     }
 
-    const formData = new FormData();
-    formData.append('file', file.buffer, file.originalname);
+    const filename = `${sku}-${file.originalname}`;
+    const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1, user_id = ? WHERE sku = ?';
 
-    axios.post('https://front-techcomp.rkcreativo.com.mx/upload.php', formData, {
-        headers: {
-            ...formData.getHeaders()
+    // Actualizar la base de datos primero
+    db.query(sql, [filename, userId, sku], (err, result) => {
+        if (err) {
+            console.log("Error al actualizar la base de datos", err);
+            return res.json({ Error: "Error al actualizar la base de datos" });
         }
-    })
-    .then(response => {
-        const imageUrl = response.data.url; // Assuming the response contains the URL of the uploaded file
 
-        const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1, user_id = ? WHERE sku = ?';
-        db.query(sql, [imageUrl, userId, sku], (err, result) => {
-            if (err) {
-                console.log("Error al actualizar la base de datos", err);
-                return res.json({ Error: "Error al actualizar la base de datos" });
+        // Subir la imagen al servidor externo
+        const formData = new FormData();
+        formData.append('file', file.buffer, filename);
+
+        axios.post('https://front-techcomp.rkcreativo.com.mx/upload.php', formData, {
+            headers: {
+                ...formData.getHeaders()
             }
-            console.log("Archivo subido y base de datos actualizada correctamente");
-            return res.json({ Status: "Exito", filename: imageUrl });
+        })
+        .then(response => {
+            if (response.data.status === 'success') {
+                const imageUrl = response.data.url; 
+
+                // Actualizar la base de datos con la URL de la imagen
+                const sqlUpdate = 'UPDATE reports SET image_name = ?, image_uploaded = 1 WHERE sku = ?';
+                db.query(sqlUpdate, [imageUrl, sku], (err, result) => {
+                    if (err) {
+                        console.log("Error al actualizar la URL de la imagen en la base de datos", err);
+                        return res.json({ Error: "Error al actualizar la URL de la imagen en la base de datos" });
+                    }
+                    console.log("Archivo subido y base de datos actualizada correctamente");
+                    return res.json({ Status: "Exito", filename: imageUrl });
+                });
+            } else {
+                return res.json({ Error: "Error al subir la imagen al servidor externo" });
+            }
+        })
+        .catch(error => {
+            console.log("Error al subir el archivo al servidor externo", error);
+            return res.json({ Error: "Error al subir el archivo al servidor externo" });
         });
-    })
-    .catch(error => {
-        console.log("Error al subir el archivo al servidor externo", error);
-        return res.json({ Error: "Error al subir el archivo al servidor externo" });
     });
 });
 
