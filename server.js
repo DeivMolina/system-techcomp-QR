@@ -8,8 +8,9 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
+import axios from 'axios';
+import FormData from 'form-data';
 import path from 'path';
-import fs from 'fs';
 
 const salt = 10;
 
@@ -22,22 +23,9 @@ app.use(cors({
 }));
 app.use(cookieParser());
 
-const uploadDir = path.join(path.resolve(), 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-}
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        const sku = req.params.sku;
-        cb(null, `${sku}-${file.originalname}`);
-    }
+const upload = multer({
+    storage: multer.memoryStorage()
 });
-
-const upload = multer({ storage });
 
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
@@ -128,46 +116,39 @@ app.get('/report/:sku', verifyUser, (req, res) => {
 app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) => {
     const sku = req.params.sku;
     const file = req.file;
-    const userId = req.userId; // ID del usuario autenticado
+    const userId = req.userId;
 
     if (!file) {
         console.log("No se subió ningún archivo");
         return res.json({ Error: "Por favor seleccione un archivo" });
     }
 
-    const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1, user_id = ? WHERE sku = ?';
-    db.query(sql, [file.filename, userId, sku], (err, result) => {
-        if (err) {
-            console.log("Error al subir el archivo", err);
-            return res.json({ Error: "Error al subir el archivo" });
+    const formData = new FormData();
+    formData.append('file', file.buffer, file.originalname);
+
+    axios.post('https://front-techcomp.rkcreativo.com.mx/upload.php', formData, {
+        headers: {
+            ...formData.getHeaders()
         }
-        console.log("Archivo subido y base de datos actualizada correctamente");
-        return res.json({ Status: "Exito", filename: file.filename });
+    })
+    .then(response => {
+        const imageUrl = response.data.url; // Assuming the response contains the URL of the uploaded file
+
+        const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1, user_id = ? WHERE sku = ?';
+        db.query(sql, [imageUrl, userId, sku], (err, result) => {
+            if (err) {
+                console.log("Error al actualizar la base de datos", err);
+                return res.json({ Error: "Error al actualizar la base de datos" });
+            }
+            console.log("Archivo subido y base de datos actualizada correctamente");
+            return res.json({ Status: "Exito", filename: imageUrl });
+        });
+    })
+    .catch(error => {
+        console.log("Error al subir el archivo al servidor externo", error);
+        return res.json({ Error: "Error al subir el archivo al servidor externo" });
     });
 });
-
-app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
-
-app.get('/admin/reports', verifyUser, (req, res) => {
-    if (req.userType !== 'admin') {
-        return res.status(403).json({ Error: "Acceso denegado" });
-    }
-
-    const sql = `
-        SELECT r.sku, r.upload_date, l.name, l.email, l.type 
-        FROM reports r 
-        JOIN login l ON r.user_id = l.id
-    `;
-
-    db.query(sql, (err, data) => {
-        if (err) {
-            console.log("Error al obtener los datos", err);
-            return res.json({ Error: "Error al obtener los datos" });
-        }
-        return res.json({ Status: "Exito", Data: data });
-    });
-});
-
 
 const PORT = process.env.PORT || 8081;
 app.listen(PORT, () => {
