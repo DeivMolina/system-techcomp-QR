@@ -17,7 +17,7 @@ const salt = 10;
 const app = express();
 app.use(express.json());
 app.use(cors({
-    origin: ["http://localhost:3000", "https://app-techcomp-16ff4d30c364.herokuapp.com", "https://front-techcomp.rkcreativo.com.mx", "https://front-techcomp.rkcreativo.com.mx/upload"],
+    origin: ["http://localhost:3000", "https://app-techcomp-16ff4d30c364.herokuapp.com", "https://front-techcomp.rkcreativo.com.mx"],
     methods: ["POST", "GET"],
     credentials: true
 }));
@@ -121,15 +121,24 @@ app.post('/report/upload/:sku', verifyUser, upload.single('file'), async (req, r
     }
 
     try {
+        // Log para verificar si se entra en el bloque try
+        console.log('Intentando subir el archivo...');
+
         // Subir archivo a servidor remoto
         const formData = new FormData();
         formData.append('file', file.buffer, file.originalname);
+
+        // Log para verificar los datos del archivo
+        console.log('Datos del archivo:', file);
 
         const uploadResponse = await axios.post('https://front-techcomp.rkcreativo.com.mx/upload', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
             }
         });
+
+        // Log para verificar la respuesta del servidor remoto
+        console.log('Respuesta del servidor remoto:', uploadResponse.data);
 
         // Actualizar base de datos con la información del archivo subido
         const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1 WHERE sku = ?';
@@ -140,7 +149,8 @@ app.post('/report/upload/:sku', verifyUser, upload.single('file'), async (req, r
             return res.json({ Status: "Exito", filename: file.originalname });
         });
     } catch (error) {
-        console.error(error);
+        // Log para capturar errores
+        console.error('Error al subir el archivo al servidor remoto:', error);
         res.json({ Error: "Error al subir el archivo al servidor remoto" });
     }
 });
