@@ -128,13 +128,15 @@ app.get('/report/:sku', verifyUser, (req, res) => {
 app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) => {
     const sku = req.params.sku;
     const file = req.file;
+    const userId = req.userId; // ID del usuario autenticado
+
     if (!file) {
         console.log("No se subió ningún archivo");
         return res.json({ Error: "Por favor seleccione un archivo" });
     }
 
-    const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1 WHERE sku = ?';
-    db.query(sql, [file.filename, sku], (err, result) => {
+    const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1, user_id = ? WHERE sku = ?';
+    db.query(sql, [file.filename, userId, sku], (err, result) => {
         if (err) {
             console.log("Error al subir el archivo", err);
             return res.json({ Error: "Error al subir el archivo" });
