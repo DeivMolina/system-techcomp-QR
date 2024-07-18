@@ -98,7 +98,7 @@ app.post('/register', (req, res) => {
             req.body.name,
             req.body.email,
             hash,
-            req.body.type // Asegúrate de que el tipo de usuario se envíe en la solicitud de registro
+            req.body.type
         ];
         db.query(sql, values, (err, result) => {
             if (err) return res.json({ Error: "Insertar datos en el servidor" });
