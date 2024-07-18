@@ -19,6 +19,7 @@ app.use(express.json());
 app.use(cors({
     origin: ["http://localhost:3000", "https://app-techcomp-16ff4d30c364.herokuapp.com", "https://front-techcomp.rkcreativo.com.mx"],
     methods: ["POST", "GET"],
+    allowedHeaders: ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
     credentials: true
 }));
 app.use(cookieParser());
