@@ -91,7 +91,7 @@ app.get('/', verifyUser, (req, res) => {
 });
 
 app.post('/register', (req, res) => {
-    const sql = "INSERT INTO login (name, email, password, type) VALUES (?)";
+    const sql = "INSERT INTO login (name, email, password, type) VALUES (?, ?, ?, ?)";
     bcrypt.hash(req.body.password.toString(), salt, (err, hash) => {
         if (err) return res.json({ Error: "Error cifrar contraseña" });
         const values = [
@@ -100,7 +100,7 @@ app.post('/register', (req, res) => {
             hash,
             req.body.type // Asegúrate de que el tipo de usuario se envíe en la solicitud de registro
         ];
-        db.query(sql, [values], (err, result) => {
+        db.query(sql, values, (err, result) => {
             if (err) return res.json({ Error: "Insertar datos en el servidor" });
             return res.json({ Status: "Exito" });
         });
