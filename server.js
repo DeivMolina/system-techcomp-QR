@@ -8,8 +8,9 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
+import admin from 'firebase-admin';
 import path from 'path';
-import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 const salt = 10;
 
@@ -22,22 +23,20 @@ app.use(cors({
 }));
 app.use(cookieParser());
 
-const uploadDir = path.join(path.resolve(), 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-}
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        const sku = req.params.sku;
-        cb(null, `${sku}-${file.originalname}`);
-    }
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    storageBucket: "app-techcomp.appspot.com"
 });
 
-const upload = multer({ storage });
+const bucket = admin.storage().bucket();
 
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
@@ -66,21 +65,31 @@ const verifyUser = (req, res, next) => {
 
 app.post('/login', (req, res) => {
     const sql = 'SELECT * FROM login WHERE email = ?';
+    console.log("Intentando iniciar sesión con el email:", req.body.email);
     db.query(sql, [req.body.email], (err, data) => {
-        if (err) return res.json({ Error: "Error al ingresar" });
+        if (err) {
+            console.log("Error al realizar la consulta a la base de datos:", err);
+            return res.json({ Error: "Error al ingresar" });
+        }
         if (data.length > 0) {
+            console.log("Usuario encontrado:", data[0]);
             bcrypt.compare(req.body.password.toString(), data[0].password, (err, response) => {
-                if (err) return res.json({ Error: "Error de contraseña" });
+                if (err) {
+                    console.log("Error al comparar la contraseña:", err);
+                    return res.json({ Error: "Error de contraseña" });
+                }
                 if (response) {
                     const user = data[0];
                     const token = jwt.sign({ id: user.id, name: user.name, type: user.type }, "jwt-secret-key", { expiresIn: '1d' });
                     res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true });
                     return res.json({ Status: "Exito", name: user.name, type: user.type, token });
                 } else {
+                    console.log("Contraseña incorrecta");
                     return res.json({ Error: "Contraseña Incorrecta" });
                 }
             });
         } else {
+            console.log("Email no encontrado");
             return res.json({ Error: "Este email no existe" });
         }
     });
@@ -98,7 +107,7 @@ app.post('/register', (req, res) => {
             req.body.name,
             req.body.email,
             hash,
-            req.body.type // Asegúrate de que el tipo de usuario se envíe en la solicitud de registro
+            req.body.type
         ];
         db.query(sql, values, (err, result) => {
             if (err) return res.json({ Error: "Insertar datos en el servidor" });
@@ -125,49 +134,64 @@ app.get('/report/:sku', verifyUser, (req, res) => {
     });
 });
 
-app.post('/report/upload/:sku', verifyUser, upload.single('file'), (req, res) => {
+app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {  // Acepta cualquier archivo con cualquier campo de nombre
+    console.log("Ruta de subida de archivos llamada");
     const sku = req.params.sku;
-    const file = req.file;
-    const userId = req.userId; // ID del usuario autenticado
+    const file = req.files[0];  // Obtén el primer archivo
+    const userId = req.userId;
 
     if (!file) {
         console.log("No se subió ningún archivo");
         return res.json({ Error: "Por favor seleccione un archivo" });
     }
 
+    console.log("Archivo subido:", file);
+    const filename = `${sku}-${Date.now()}-${file.originalname}`;
+    const fileBuffer = file.buffer;
+
+    console.log("Actualizando la base de datos...");
     const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1, user_id = ? WHERE sku = ?';
-    db.query(sql, [file.filename, userId, sku], (err, result) => {
+    db.query(sql, [filename, userId, sku], (err, result) => {
         if (err) {
-            console.log("Error al subir el archivo", err);
-            return res.json({ Error: "Error al subir el archivo" });
+            console.log("Error al actualizar la base de datos", err);
+            return res.json({ Error: "Error al actualizar la base de datos" });
         }
-        console.log("Archivo subido y base de datos actualizada correctamente");
-        return res.json({ Status: "Exito", filename: file.filename });
+
+        console.log("Base de datos actualizada correctamente");
+
+        // Subir la imagen a Firebase Storage
+        const fileUpload = bucket.file(filename);
+        const stream = fileUpload.createWriteStream({
+            metadata: {
+                contentType: file.mimetype
+            }
+        });
+
+        stream.on('error', (err) => {
+            console.log("Error al subir la imagen a Firebase Storage", err);
+            return res.json({ Error: "Error al subir la imagen a Firebase Storage" });
+        });
+
+        stream.on('finish', () => {
+            fileUpload.makePublic().then(() => {
+                const imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+
+                // Actualizar la base de datos con la URL de la imagen
+                const sqlUpdate = 'UPDATE reports SET image_name = ?, image_uploaded = 1 WHERE sku = ?';
+                db.query(sqlUpdate, [filename, sku], (err, result) => {
+                    if (err) {
+                        console.log("Error al actualizar la URL de la imagen en la base de datos", err);
+                        return res.json({ Error: "Error al actualizar la URL de la imagen en la base de datos" });
+                    }
+                    console.log("URL de la imagen actualizada en la base de datos correctamente");
+                    return res.json({ Status: "Exito", filename });
+                });
+            });
+        });
+
+        stream.end(fileBuffer);
     });
 });
-
-app.use('/uploads', express.static(path.join(path.resolve(), 'uploads')));
-
-app.get('/admin/reports', verifyUser, (req, res) => {
-    if (req.userType !== 'admin') {
-        return res.status(403).json({ Error: "Acceso denegado" });
-    }
-
-    const sql = `
-        SELECT r.sku, r.upload_date, l.name, l.email, l.type 
-        FROM reports r 
-        JOIN login l ON r.user_id = l.id
-    `;
-
-    db.query(sql, (err, data) => {
-        if (err) {
-            console.log("Error al obtener los datos", err);
-            return res.json({ Error: "Error al obtener los datos" });
-        }
-        return res.json({ Status: "Exito", Data: data });
-    });
-});
-
 
 const PORT = process.env.PORT || 8081;
 app.listen(PORT, () => {
