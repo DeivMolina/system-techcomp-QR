@@ -145,6 +145,12 @@ app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {  // Ac
         return res.json({ Error: "Por favor seleccione un archivo" });
     }
 
+    // Validar el tipo de archivo
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+    if (!allowedTypes.includes(file.mimetype)) {
+        return res.json({ Error: "Tipo de archivo no permitido. Solo se permiten archivos .png, .jpg y .jpeg" });
+    }
+
     console.log("Archivo subido:", file);
     const filename = `${sku}-${Date.now()}-${file.originalname}`;
     const fileBuffer = file.buffer;
