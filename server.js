@@ -199,6 +199,26 @@ app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {  // Ac
     });
 });
 
+app.get('/admin/reports', verifyUser, (req, res) => {
+    if (req.userType !== 'admin') {
+        return res.status(403).json({ Error: "Acceso denegado" });
+    }
+
+    const sql = `
+        SELECT r.sku, r.upload_date, r.image_name, r.image_uploaded, r.distributor, r.user_id, l.name, l.email, l.type 
+        FROM reports r 
+        JOIN login l ON r.user_id = l.id
+    `;
+
+    db.query(sql, (err, data) => {
+        if (err) {
+            console.log("Error al obtener los datos", err);
+            return res.json({ Error: "Error al obtener los datos" });
+        }
+        return res.json({ Status: "Exito", Data: data });
+    });
+});
+
 const PORT = process.env.PORT || 8081;
 app.listen(PORT, () => {
     console.log(`Servidor levantado en ${PORT}`);
