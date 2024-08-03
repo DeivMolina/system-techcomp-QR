@@ -118,7 +118,7 @@ app.post('/register', (req, res) => {
 
 // Verificacion de Logout
 app.get('/logout', (req, res) => {
-    res.clearCookie('token');
+    res.clearCookie('token', { path: '/' });
     return res.json({ Status: "Exito" });
 });
 
