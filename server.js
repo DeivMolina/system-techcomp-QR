@@ -209,6 +209,7 @@ app.get('/admin/reports', verifyUser, (req, res) => {
         SELECT r.sku, r.upload_date, r.image_name, r.image_uploaded, r.distributor, r.user_id, l.name, l.email, l.type 
         FROM reports r 
         JOIN login l ON r.user_id = l.id
+        ORDER BY r.upload_date DESC
     `;
 
     db.query(sql, (err, data) => {
