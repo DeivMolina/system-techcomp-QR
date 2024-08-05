@@ -122,7 +122,7 @@ app.get('/logout', (req, res) => {
     return res.json({ Status: "Exito" });
 });
 
-app.get('/report/:sku', verifyUser, (req, res) => {
+app.get('/report/:sku', (req, res) => {
     const sku = req.params.sku;
     const sql = 'SELECT * FROM reports WHERE sku = ?';
     db.query(sql, [sku], (err, data) => {
@@ -134,6 +134,7 @@ app.get('/report/:sku', verifyUser, (req, res) => {
         }
     });
 });
+
 
 app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {  // Acepta cualquier archivo con cualquier campo de nombre
     console.log("Ruta de subida de archivos llamada");
