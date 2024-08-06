@@ -48,7 +48,7 @@ const db = mysql.createConnection({
 const verifyUser = (req, res, next) => {
     const token = req.cookies.token;
     if (!token) {
-        return res.status(401).json({ Error: "No te has autentificado" });
+        return res.status(401).json({ Error: "No te has autentificado Backend" });
     } else {
         jwt.verify(token, "jwt-secret-key", (err, decoded) => {
             if (err) {
@@ -65,21 +65,31 @@ const verifyUser = (req, res, next) => {
 
 app.post('/login', (req, res) => {
     const sql = 'SELECT * FROM login WHERE email = ?';
+    console.log("Intentando iniciar sesión con el email:", req.body.email);
     db.query(sql, [req.body.email], (err, data) => {
-        if (err) return res.json({ Error: "Error al ingresar" });
+        if (err) {
+            console.log("Error al realizar la consulta a la base de datos:", err);
+            return res.json({ Error: "Error al ingresar" });
+        }
         if (data.length > 0) {
+            console.log("Usuario encontrado:", data[0]);
             bcrypt.compare(req.body.password.toString(), data[0].password, (err, response) => {
-                if (err) return res.json({ Error: "Error de contraseña" });
+                if (err) {
+                    console.log("Error al comparar la contraseña:", err);
+                    return res.json({ Error: "Error de contraseña" });
+                }
                 if (response) {
                     const user = data[0];
                     const token = jwt.sign({ id: user.id, name: user.name, type: user.type }, "jwt-secret-key", { expiresIn: '1d' });
                     res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true });
                     return res.json({ Status: "Exito", name: user.name, type: user.type, token });
                 } else {
+                    console.log("Contraseña incorrecta");
                     return res.json({ Error: "Contraseña Incorrecta" });
                 }
             });
         } else {
+            console.log("Email no encontrado");
             return res.json({ Error: "Este email no existe" });
         }
     });
@@ -106,6 +116,7 @@ app.post('/register', (req, res) => {
     });
 });
 
+// Verificacion de Logout
 app.get('/logout', (req, res) => {
     res.clearCookie('token', { path: '/' });
     return res.json({ Status: "Exito" });
@@ -124,27 +135,39 @@ app.get('/report/:sku', (req, res) => {
     });
 });
 
-app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {
+
+app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {  // Acepta cualquier archivo con cualquier campo de nombre
+    console.log("Ruta de subida de archivos llamada");
     const sku = req.params.sku;
-    const file = req.files[0];
+    const file = req.files[0];  // Obtén el primer archivo
     const userId = req.userId;
 
     if (!file) {
+        console.log("No se subió ningún archivo");
         return res.json({ Error: "Por favor seleccione un archivo" });
     }
 
+    // Validar el tipo de archivo
     const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
     if (!allowedTypes.includes(file.mimetype)) {
         return res.json({ Error: "Tipo de archivo no permitido. Solo se permiten archivos .png, .jpg y .jpeg" });
     }
 
+    console.log("Archivo subido:", file);
     const filename = `${sku}-${Date.now()}-${file.originalname}`;
     const fileBuffer = file.buffer;
 
+    console.log("Actualizando la base de datos...");
     const sql = 'UPDATE reports SET image_name = ?, upload_date = NOW(), image_uploaded = 1, user_id = ? WHERE sku = ?';
     db.query(sql, [filename, userId, sku], (err, result) => {
-        if (err) return res.json({ Error: "Error al actualizar la base de datos" });
+        if (err) {
+            console.log("Error al actualizar la base de datos", err);
+            return res.json({ Error: "Error al actualizar la base de datos" });
+        }
 
+        console.log("Base de datos actualizada correctamente");
+
+        // Subir la imagen a Firebase Storage
         const fileUpload = bucket.file(filename);
         const stream = fileUpload.createWriteStream({
             metadata: {
@@ -153,6 +176,7 @@ app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {
         });
 
         stream.on('error', (err) => {
+            console.log("Error al subir la imagen a Firebase Storage", err);
             return res.json({ Error: "Error al subir la imagen a Firebase Storage" });
         });
 
@@ -160,9 +184,14 @@ app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {
             fileUpload.makePublic().then(() => {
                 const imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
 
+                // Actualizar la base de datos con la URL de la imagen
                 const sqlUpdate = 'UPDATE reports SET image_name = ?, image_uploaded = 1 WHERE sku = ?';
                 db.query(sqlUpdate, [filename, sku], (err, result) => {
-                    if (err) return res.json({ Error: "Error al actualizar la URL de la imagen en la base de datos" });
+                    if (err) {
+                        console.log("Error al actualizar la URL de la imagen en la base de datos", err);
+                        return res.json({ Error: "Error al actualizar la URL de la imagen en la base de datos" });
+                    }
+                    console.log("URL de la imagen actualizada en la base de datos correctamente");
                     return res.json({ Status: "Exito", filename });
                 });
             });
@@ -185,7 +214,10 @@ app.get('/admin/reports', verifyUser, (req, res) => {
     `;
 
     db.query(sql, (err, data) => {
-        if (err) return res.json({ Error: "Error al obtener los datos" });
+        if (err) {
+            console.log("Error al obtener los datos", err);
+            return res.json({ Error: "Error al obtener los datos" });
+        }
         return res.json({ Status: "Exito", Data: data });
     });
 });
