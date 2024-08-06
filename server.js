@@ -135,6 +135,7 @@ app.get('/report/:sku', (req, res) => {
     });
 });
 
+
 app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {  // Acepta cualquier archivo con cualquier campo de nombre
     console.log("Ruta de subida de archivos llamada");
     const sku = req.params.sku;
