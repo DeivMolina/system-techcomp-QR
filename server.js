@@ -124,13 +124,9 @@ app.get('/logout', (req, res) => {
 
 app.get('/report/:sku', (req, res) => {
     const sku = req.params.sku;
-    console.log("Consultando el folio:", sku);
     const sql = 'SELECT * FROM reports WHERE sku = ?';
     db.query(sql, [sku], (err, data) => {
-        if (err) {
-            console.log("Error al verificar el Folio en la base de datos:", err);
-            return res.json({ Error: "Error al verificar el Folio" });
-        }
+        if (err) return res.json({ Error: "Error al verificar el Folio" });
         if (data.length > 0) {
             return res.json({ Status: "Exito", Report: data[0] });
         } else {
@@ -138,8 +134,6 @@ app.get('/report/:sku', (req, res) => {
         }
     });
 });
-
-
 
 app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {  // Acepta cualquier archivo con cualquier campo de nombre
     console.log("Ruta de subida de archivos llamada");
