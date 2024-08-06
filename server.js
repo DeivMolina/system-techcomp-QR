@@ -48,7 +48,7 @@ const db = mysql.createConnection({
 const verifyUser = (req, res, next) => {
     const token = req.cookies.token;
     if (!token) {
-        return res.status(401).json({ Error: "No te has autentificado" });
+        return res.status(401).json({ Error: "No te has autentificado Backend" });
     } else {
         jwt.verify(token, "jwt-secret-key", (err, decoded) => {
             if (err) {
