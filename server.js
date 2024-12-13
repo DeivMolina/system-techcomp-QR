@@ -30,8 +30,8 @@ const upload = multer({ storage });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// const serviceAccount = JSON.parse(fs.readFileSync('./firebase-service-account.json', 'utf8'));
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+const serviceAccount = JSON.parse(fs.readFileSync('./firebase-service-account.json', 'utf8'));
+//const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
@@ -132,20 +132,6 @@ app.get('/report/:sku', (req, res) => {
         SELECT * FROM reports WHERE sku = ?
     `;
 
-    // Query para obtener los canales relacionados con el reporte
-    const channelsQuery = `
-        SELECT * FROM channels WHERE report_id = (
-            SELECT id FROM reports WHERE sku = ?
-        )
-    `;
-
-    // Query para obtener el sampler relacionado con el reporte
-    const samplerQuery = `
-        SELECT * FROM samplers WHERE report_id = (
-            SELECT id FROM reports WHERE sku = ?
-        )
-    `;
-
     db.query(reportQuery, [sku], (err, reportResult) => {
         if (err) {
             console.error('Error al obtener el reporte:', err);
@@ -158,29 +144,63 @@ app.get('/report/:sku', (req, res) => {
 
         const report = reportResult[0];
 
-        // Obtener los canales
-        db.query(channelsQuery, [sku], (err, channelsResult) => {
-            if (err) {
-                console.error('Error al obtener los canales:', err);
-                return res.status(500).json({ Error: 'Error al obtener los canales' });
-            }
+        console.log('Consulta del reporte:', report);
 
-            // Obtener el sampler
-            db.query(samplerQuery, [sku], (err, samplerResult) => {
+        // Verificar si es marca Scion Instruments y modelo LC6000
+        if (report.brand === 'Scion Instruments' && report.model === 'LC6000') {
+            // Query para obtener los módulos relacionados con el reporte
+            const modulesQuery = `
+                SELECT * FROM modules WHERE report_id = ?
+            `;
+
+            db.query(modulesQuery, [report.id], (err, modulesResult) => {
                 if (err) {
-                    console.error('Error al obtener el sampler:', err);
-                    return res.status(500).json({ Error: 'Error al obtener el sampler' });
+                    console.error('Error al obtener los módulos:', err);
+                    return res.status(500).json({ Error: 'Error al obtener los módulos' });
                 }
 
-                // Responder con toda la información
+                console.log('Consulta de módulos:', modulesResult);
+
                 return res.status(200).json({
                     Status: 'Exito',
                     Report: report,
-                    Channels: channelsResult,
-                    Sampler: samplerResult.length > 0 ? samplerResult[0] : null,
+                    Modules: modulesResult, // Enviar módulos para LC6000
                 });
             });
-        });
+        } else {
+            // Consultar canales y sampler para otros modelos
+            const channelsQuery = `
+                SELECT * FROM channels WHERE report_id = ?
+            `;
+            const samplerQuery = `
+                SELECT * FROM samplers WHERE report_id = ?
+            `;
+
+            db.query(channelsQuery, [report.id], (err, channelsResult) => {
+                if (err) {
+                    console.error('Error al obtener los canales:', err);
+                    return res.status(500).json({ Error: 'Error al obtener los canales' });
+                }
+
+                console.log('Consulta de canales:', channelsResult);
+
+                db.query(samplerQuery, [report.id], (err, samplerResult) => {
+                    if (err) {
+                        console.error('Error al obtener el sampler:', err);
+                        return res.status(500).json({ Error: 'Error al obtener el sampler' });
+                    }
+
+                    console.log('Consulta del sampler:', samplerResult);
+
+                    return res.status(200).json({
+                        Status: 'Exito',
+                        Report: report,
+                        Channels: channelsResult, // Enviar canales para otros modelos
+                        Sampler: samplerResult.length > 0 ? samplerResult[0] : null, // Enviar sampler
+                    });
+                });
+            });
+        }
     });
 });
 
@@ -229,106 +249,133 @@ app.post('/report/upload-temp/:sku', verifyUser, upload.any(), (req, res) => {
     stream.end(fileBuffer);
 });
 
-app.post('/report/complete/:sku', verifyUser, async (req, res) => {
+app.post('/report/complete/:sku', verifyUser, (req, res) => {
     const sku = req.params.sku;
+    console.log('SKU recibido:', sku);
 
     // Log para revisar los datos que llegan al backend
     console.log('Body de la solicitud:', req.body);
 
-    // Verificar si los datos están presentes en el cuerpo de la solicitud
-    if (!req.body || !req.body.reports || !req.body.channels || !req.body.samplers) {
-        console.error('Faltan datos en el cuerpo de la solicitud.');
-        return res.status(400).json({ Error: 'Faltan datos en la solicitud.' });
-    }
-
     const {
-        reports: {
-            image_name,
-            image_uploaded,
-            user_id,
-            model_id,
-            serialNumber,
-            serviceDate,
-            serviceType,
-            generalDescription,
-        },
+        serialNumber,
+        model,
+        brand,
+        serviceDate,
+        serviceType,
+        generalDescription,
         channels,
-        samplers,
+        sampler,
+        image_name,
+        user_id,
+        Organizer,
+        Pump,
+        AutoSampler,
+        Detectors,
     } = req.body;
 
-    try {
-        // Actualizar la tabla `reports`
-        const updateReportSql = `
-            UPDATE reports
-            SET 
-                image_name = ?, 
-                upload_date = NOW(), 
-                image_uploaded = ?, 
-                user_id = ?, 
-                model_id = ?, 
-                serialNumber = ?, 
-                service_date = ?, 
-                service_type = ?, 
-                general_description = ?
-            WHERE sku = ?
-        `;
+    // Actualizar la tabla `reports`
+    const updateReportSql = `
+        UPDATE reports
+        SET 
+            image_name = ?, 
+            upload_date = NOW(), 
+            image_uploaded = 1, 
+            user_id = ?, 
+            serialNumber = ?, 
+            model = ?, 
+            brand = ?, 
+            service_date = ?, 
+            service_type = ?, 
+            general_description = ?, 
+            model_id = NULL
+        WHERE sku = ?
+    `;
 
-        const reportParams = [
-            image_name,
-            image_uploaded,
-            user_id,
-            model_id,
-            serialNumber,
-            serviceDate,
-            serviceType,
-            generalDescription,
-            sku,
-        ];
+    const reportParams = [
+        image_name,
+        user_id,
+        serialNumber,
+        model,
+        brand,
+        serviceDate,
+        serviceType,
+        generalDescription,
+        sku,
+    ];
 
-        console.log('Ejecutando consulta SQL para reportes con parámetros:', reportParams);
+    db.query(updateReportSql, reportParams, (err, result) => {
+        if (err) {
+            console.error('Error al actualizar la tabla reports:', err);
+            return res.status(500).json({ Error: 'Error al actualizar el reporte en la base de datos.' });
+        }
 
-        // Ejecutar la actualización del reporte
-        db.query(updateReportSql, reportParams, (err, result) => {
+        if (result.affectedRows === 0) {
+            console.error('No se encontró el SKU en la base de datos.');
+            return res.status(404).json({ Error: 'No se encontró el SKU en la base de datos.' });
+        }
+
+        // Obtener el ID del reporte actualizado
+        const getReportIdSql = `SELECT id FROM reports WHERE sku = ?`;
+        db.query(getReportIdSql, [sku], (err, results) => {
             if (err) {
-                console.error('Error al actualizar la tabla reports:', err);
-                return res.status(500).json({ Error: 'Error al actualizar el reporte en la base de datos.' });
+                console.error('Error al obtener el ID del reporte:', err);
+                return res.status(500).json({ Error: 'Error al obtener el ID del reporte.' });
             }
 
-            if (result.affectedRows === 0) {
-                console.error('No se encontró el SKU en la base de datos.');
-                return res.status(404).json({ Error: 'No se encontró el SKU en la base de datos.' });
+            const reportId = results[0]?.id;
+
+            if (!reportId) {
+                console.error('No se encontró el ID del reporte después de la actualización.');
+                return res.status(404).json({ Error: 'No se encontró el reporte después de la actualización.' });
             }
 
-            // Obtener el ID del reporte actualizado
-            const getReportIdSql = `SELECT id FROM reports WHERE sku = ?`;
-            db.query(getReportIdSql, [sku], (err, results) => {
-                if (err) {
-                    console.error('Error al obtener el ID del reporte:', err);
-                    return res.status(500).json({ Error: 'Error al obtener el ID del reporte.' });
-                }
+            console.log('ID del reporte obtenido:', reportId);
 
-                const reportId = results[0]?.id;
-
-                if (!reportId) {
-                    console.error('No se encontró el ID del reporte después de la actualización.');
-                    return res.status(404).json({ Error: 'No se encontró el reporte después de la actualización.' });
-                }
-
-                console.log('ID del reporte obtenido:', reportId);
-
-                // Insertar canales
-                const insertChannelSql = `
-                    INSERT INTO channels (report_id, channel_number, injector, detector, detector_serial_number, column_pn, column_description)
+            if (model === 'LC6000') {
+                // Manejar el modelo LC6000
+                const insertModulesSql = `
+                    INSERT INTO modules (report_id, module_name, module_value)
                     VALUES ?
                 `;
 
-                const channelValues = channels.map((channel, index) => [
+                const moduleValues = [
+                    [reportId, 'Organizer', Organizer || 'NONE'],
+                    [reportId, 'Pump', Pump || 'NONE'],
+                    [reportId, 'AutoSampler', AutoSampler || 'NONE'],
+                ];
+
+                if (Detectors && Detectors.length > 0) {
+                    Detectors.forEach((detector) => {
+                        moduleValues.push([reportId, 'Detector', detector]);
+                    });
+                }
+
+                db.query(insertModulesSql, [moduleValues], (err) => {
+                    if (err) {
+                        console.error('Error al insertar módulos:', err);
+                        return res.status(500).json({ Error: 'Error al insertar los módulos en la base de datos.' });
+                    }
+
+                    console.log('Módulos insertados con éxito.');
+                    return res.status(200).json({
+                        Status: 'Exito',
+                        Message: 'Reporte y módulos actualizados con éxito.',
+                    });
+                });
+            } else {
+                // Manejar otros modelos
+                const insertChannelSql = `
+                    INSERT INTO channels (report_id, channel_title, injector, detector, detector_serial_number, column_pn, column_description)
+                    VALUES ?
+                `;
+
+                const channelValues = channels.map((channel) => [
                     reportId,
-                    index + 1, // channel_number basado en el índice del canal
-                    channel.injector,
+                    channel.canal,
+                    channel.inyector,
                     channel.detector,
-                    channel.detectorSerialNumber,
-                    channel.columnPN,
+                    channel.serialNumber,
+                    channel.columnPart,
                     channel.columnDescription,
                 ]);
 
@@ -343,16 +390,17 @@ app.post('/report/complete/:sku', verifyUser, async (req, res) => {
                     });
                 }
 
-                // Insertar sampler
                 const insertSamplerSql = `
-                    INSERT INTO samplers (report_id, sampler_type , sampler_serial_number)
-                    VALUES (?, ?, ?)
+                    INSERT INTO samplers (report_id, sampler_type, sampler_name, sampler_serial_number, sampler_description)
+                    VALUES (?, ?, ?, ?, ?)
                 `;
 
                 const samplerValues = [
                     reportId,
-                    samplers.type,
-                    samplers.serialNumber,
+                    sampler.type,
+                    sampler.otherSampler || null,
+                    sampler.serialNumber,
+                    sampler.description,
                 ];
 
                 db.query(insertSamplerSql, samplerValues, (err) => {
@@ -363,19 +411,14 @@ app.post('/report/complete/:sku', verifyUser, async (req, res) => {
 
                     console.log('Sampler insertado con éxito.');
 
-                    // Respuesta exitosa
-                    res.status(200).json({
+                    return res.status(200).json({
                         Status: 'Exito',
                         Message: 'Reporte, canales y sampler actualizados con éxito.',
-                        imageUrl: `https://storage.googleapis.com/${bucket.name}/${image_name}`,
                     });
                 });
-            });
+            }
         });
-    } catch (err) {
-        console.error('Error general en el servidor:', err);
-        res.status(500).json({ Error: 'Error al procesar la solicitud.' });
-    }
+    });
 });
 
 app.post('/report/upload/:sku', verifyUser, upload.any(), (req, res) => {  // Acepta cualquier archivo con cualquier campo de nombre
