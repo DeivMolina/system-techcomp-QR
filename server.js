@@ -44,7 +44,8 @@ const db = mysql.createConnection({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_DATABASE
+    database: process.env.DB_DATABASE,
+    port: process.env.DB_PORT,
 });
 
 const verifyUser = (req, res, next) => {
@@ -102,13 +103,15 @@ app.get('/', verifyUser, (req, res) => {
 });
 
 app.post('/register', (req, res) => {
-    const sql = "INSERT INTO login (name, email, password, type) VALUES (?, ?, ?, ?)";
+    const sql = "INSERT INTO login (name, email, password, distributor, region, type) VALUES (?, ?, ?, ?, ?, ?)";
     bcrypt.hash(req.body.password.toString(), salt, (err, hash) => {
         if (err) return res.json({ Error: "Error cifrar contraseña" });
         const values = [
             req.body.name,
             req.body.email,
             hash,
+            null, // distributor como NULL
+            null, // region como NULL
             req.body.type
         ];
         db.query(sql, values, (err, result) => {
@@ -117,6 +120,7 @@ app.post('/register', (req, res) => {
         });
     });
 });
+
 
 // Verificacion de Logout
 app.get('/logout', (req, res) => {
