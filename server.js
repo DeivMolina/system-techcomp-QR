@@ -30,7 +30,10 @@ const upload = multer({ storage });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// development
 //const serviceAccount = JSON.parse(fs.readFileSync('./firebase-service-account.json', 'utf8'));
+
+// Production
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
@@ -87,8 +90,8 @@ app.post('/login', (req, res) => {
                     res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true });
                     return res.json({ Status: "Exito", name: user.name, type: user.type, token });
                 } else {
-                    console.log("Contraseña incorrecta");
-                    return res.json({ Error: "Contraseña Incorrecta" });
+                    console.log("Wrong Password");
+                    return res.json({ Error: "Wrong Password" });
                 }
             });
         } else {
@@ -274,6 +277,7 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
         Organizer,
         Pump,
         AutoSampler,
+        ColumnOven,
         Detectors,
     } = req.body;
 
@@ -336,37 +340,60 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
             console.log('ID del reporte obtenido:', reportId);
 
             if (model === 'LC6000') {
-                // Manejar el modelo LC6000
+                // Desestructurar las propiedades desde req.body
+                const {
+                    Organizer,
+                    Organizer_serial_number,
+                    Pump,
+                    Pump_serial_number,
+                    AutoSampler,
+                    AutoSampler_serial_number,
+                    ColumnOven,
+                    ColumnOven_serial_number,
+                    Detectors,
+                } = req.body;
+
                 const insertModulesSql = `
-                    INSERT INTO modules (report_id, module_name, module_value)
+                    INSERT INTO modules (report_id, module_name, module_value, module_serial_number)
                     VALUES ?
                 `;
-
+            
+                // Construir los valores de los módulos principales
                 const moduleValues = [
-                    [reportId, 'Organizer', Organizer || 'NONE'],
-                    [reportId, 'Pump', Pump || 'NONE'],
-                    [reportId, 'AutoSampler', AutoSampler || 'NONE'],
+                    [reportId, 'Organizer', Organizer || 'NONE', Organizer_serial_number || null],
+                    [reportId, 'Pump', Pump || 'NONE', Pump_serial_number || null],
+                    [reportId, 'AutoSampler', AutoSampler || 'NONE', AutoSampler_serial_number || null],
+                    [reportId, 'ColumnOven', ColumnOven || 'NONE', ColumnOven_serial_number || null],
                 ];
-
-                if (Detectors && Detectors.length > 0) {
+            
+                // Procesar detectores
+                if (Detectors && Array.isArray(Detectors) && Detectors.length > 0) {
                     Detectors.forEach((detector) => {
-                        moduleValues.push([reportId, 'Detector', detector]);
+                        moduleValues.push([
+                            reportId,
+                            'Detector',
+                            detector.name || 'NONE', // Convertir nombre a texto
+                            detector.serial_number || null, // Agregar el número de serie
+                        ]);
                     });
                 }
 
+                console.log("Valores a insertar en la base de datos:", moduleValues); // Depuración
+            
+                // Insertar datos en la base de datos
                 db.query(insertModulesSql, [moduleValues], (err) => {
                     if (err) {
                         console.error('Error al insertar módulos:', err);
                         return res.status(500).json({ Error: 'Error al insertar los módulos en la base de datos.' });
                     }
-
+            
                     console.log('Módulos insertados con éxito.');
                     return res.status(200).json({
                         Status: 'Exito',
                         Message: 'Reporte y módulos actualizados con éxito.',
                     });
                 });
-            } else {
+            }   else {
                 // Manejar otros modelos
                 const insertChannelSql = `
                     INSERT INTO channels (report_id, channel_title, injector, detector, detector_serial_number, column_pn, column_description)
