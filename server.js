@@ -426,21 +426,21 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
                     VALUES ?
                 `;
 
-                const samplerValues = sampler.map((samplerItem) => [
+                const samplerValues = samplers.map((samplerItem) => [
                     reportId,
                     samplerItem.type,
                     samplerItem.otherSampler || null,
                     samplerItem.serialNumber,
                     samplerItem.description,
                 ]);
-
+                
                 if (samplerValues.length > 0) {
-                    db.query(insertSamplersSql, [samplerValues], (err) => {
+                    db.query(insertSamplerSql, [samplerValues], (err) => {
                         if (err) {
                             console.error('Error al insertar samplers:', err);
                             return res.status(500).json({ Error: 'Error al insertar los samplers en la base de datos.' });
                         }
-    
+                
                         console.log('Samplers insertados con éxito.');
                     });
                 }
