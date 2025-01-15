@@ -442,6 +442,11 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
                         }
                 
                         console.log('Samplers insertados con éxito.');
+
+                        return res.status(200).json({
+                            Status: 'Exito',
+                            Message: 'Reporte, canales y sampler actualizados con éxito.',
+                        });
                     });
                 }
             }
