@@ -271,7 +271,7 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
         serviceType,
         generalDescription,
         channels,
-        sampler,
+        samplers,
         image_name,
         user_id,
         Organizer,
@@ -423,30 +423,27 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
 
                 const insertSamplerSql = `
                     INSERT INTO samplers (report_id, sampler_type, sampler_name, sampler_serial_number, sampler_description)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES ?
                 `;
 
-                const samplerValues = [
+                const samplerValues = sampler.map((samplerItem) => [
                     reportId,
-                    sampler.type,
-                    sampler.otherSampler || null,
-                    sampler.serialNumber,
-                    sampler.description,
-                ];
+                    samplerItem.type,
+                    samplerItem.otherSampler || null,
+                    samplerItem.serialNumber,
+                    samplerItem.description,
+                ]);
 
-                db.query(insertSamplerSql, samplerValues, (err) => {
-                    if (err) {
-                        console.error('Error al insertar sampler:', err);
-                        return res.status(500).json({ Error: 'Error al insertar el sampler en la base de datos.' });
-                    }
-
-                    console.log('Sampler insertado con éxito.');
-
-                    return res.status(200).json({
-                        Status: 'Exito',
-                        Message: 'Reporte, canales y sampler actualizados con éxito.',
+                if (samplerValues.length > 0) {
+                    db.query(insertSamplersSql, [samplerValues], (err) => {
+                        if (err) {
+                            console.error('Error al insertar samplers:', err);
+                            return res.status(500).json({ Error: 'Error al insertar los samplers en la base de datos.' });
+                        }
+    
+                        console.log('Samplers insertados con éxito.');
                     });
-                });
+                }
             }
         });
     });
