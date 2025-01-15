@@ -191,19 +191,19 @@ app.get('/report/:sku', (req, res) => {
 
                 console.log('Consulta de canales:', channelsResult);
 
-                db.query(samplerQuery, [report.id], (err, samplerResult) => {
+                db.query(samplersQuery, [report.id], (err, samplersResult) => {
                     if (err) {
-                        console.error('Error al obtener el sampler:', err);
-                        return res.status(500).json({ Error: 'Error al obtener el sampler' });
+                        console.error('Error al obtener los samplers:', err);
+                        return res.status(500).json({ Error: 'Error al obtener los samplers' });
                     }
 
-                    console.log('Consulta del sampler:', samplerResult);
+                    console.log('Consulta de samplers:', samplersResult);
 
                     return res.status(200).json({
                         Status: 'Exito',
                         Report: report,
                         Channels: channelsResult, // Enviar canales para otros modelos
-                        Sampler: samplerResult.length > 0 ? samplerResult[0] : null, // Enviar sampler
+                        Samplers: samplersResult, // Enviar todos los samplers
                     });
                 });
             });
