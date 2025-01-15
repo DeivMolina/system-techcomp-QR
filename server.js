@@ -179,7 +179,7 @@ app.get('/report/:sku', (req, res) => {
             const channelsQuery = `
                 SELECT * FROM channels WHERE report_id = ?
             `;
-            const samplerQuery = `
+            const samplersQuery = `
                 SELECT * FROM samplers WHERE report_id = ?
             `;
 
