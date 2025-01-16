@@ -297,7 +297,7 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
             service_type = ?, 
             general_description = ?, 
             engineer_name = ?,
-            model_id = NULL,
+            model_id = NULL
         WHERE sku = ?
     `;
 
@@ -311,7 +311,7 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
         serviceType,
         generalDescription,
         engineer_name,
-        sku,
+        sku
     ];
 
     db.query(updateReportSql, reportParams, (err, result) => {
