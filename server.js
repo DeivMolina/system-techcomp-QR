@@ -296,8 +296,8 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
             service_date = ?, 
             service_type = ?, 
             general_description = ?, 
-            model_id = NULL,
             engineer_name = ?,
+            model_id = NULL,
         WHERE sku = ?
     `;
 
