@@ -274,6 +274,7 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
         samplers,
         image_name,
         user_id,
+        engineer_name,
         Organizer,
         Pump,
         AutoSampler,
@@ -295,7 +296,8 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
             service_date = ?, 
             service_type = ?, 
             general_description = ?, 
-            model_id = NULL
+            model_id = NULL,
+            engineer_name = ?,
         WHERE sku = ?
     `;
 
@@ -308,6 +310,7 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
         serviceDate,
         serviceType,
         generalDescription,
+        engineer_name,
         sku,
     ];
 
