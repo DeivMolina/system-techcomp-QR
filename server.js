@@ -274,7 +274,7 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
         samplers,
         image_name,
         user_id,
-        engineer_name,
+        engineerName,
         Organizer,
         Pump,
         AutoSampler,
@@ -296,8 +296,8 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
             service_date = ?, 
             service_type = ?, 
             general_description = ?, 
-            engineer_name = ?,
-            model_id = NULL
+            model_id = NULL,
+            engineer_name = ?
         WHERE sku = ?
     `;
 
