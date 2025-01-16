@@ -310,7 +310,7 @@ app.post('/report/complete/:sku', verifyUser, (req, res) => {
         serviceDate,
         serviceType,
         generalDescription,
-        engineer_name,
+        engineerName,
         sku
     ];
 
