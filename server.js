@@ -52,54 +52,61 @@ const db = mysql.createConnection({
 });
 
 const verifyUser = (req, res, next) => {
-    const token = req.cookies.token;
-    if (!token) {
-        return res.status(401).json({ Error: "No te has autentificado Backend" });
-    } else {
-        jwt.verify(token, "jwt-secret-key", (err, decoded) => {
-            if (err) {
-                return res.status(401).json({ Error: "Token no es correcto" });
-            } else {
-                req.userId = decoded.id;
-                req.userName = decoded.name;
-                req.userType = decoded.type;
-                next();
-            }
-        });
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        return res.status(401).json({ Error: "No te has autenticado" });
     }
+
+    const token = authHeader.split(' ')[1]; // Eliminar 'Bearer ' del encabezado
+    if (!token) {
+        return res.status(401).json({ Error: "Token no proporcionado" });
+    }
+
+    jwt.verify(token, "jwt-secret-key", (err, decoded) => {
+        if (err) {
+            return res.status(401).json({ Error: "Token inválido o expirado" });
+        }
+        req.userId = decoded.id;
+        req.userName = decoded.name;
+        req.userType = decoded.type;
+        next();
+    });
 };
 
 app.post('/login', (req, res) => {
     const sql = 'SELECT * FROM login WHERE email = ?';
-    console.log("Intentando iniciar sesión con el email:", req.body.email);
     db.query(sql, [req.body.email], (err, data) => {
         if (err) {
-            console.log("Error al realizar la consulta a la base de datos:", err);
-            return res.json({ Error: "Error al ingresar" });
+            return res.status(500).json({ Error: "Error al ingresar" });
         }
         if (data.length > 0) {
-            console.log("Usuario encontrado:", data[0]);
             bcrypt.compare(req.body.password.toString(), data[0].password, (err, response) => {
                 if (err) {
-                    console.log("Error al comparar la contraseña:", err);
-                    return res.json({ Error: "Error de contraseña" });
+                    return res.status(500).json({ Error: "Error de contraseña" });
                 }
                 if (response) {
                     const user = data[0];
-                    const token = jwt.sign({ id: user.id, name: user.name, type: user.type }, "jwt-secret-key", { expiresIn: '1d' });
-                    res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true });
-                    return res.json({ Status: "Exito", name: user.name, type: user.type, token });
+                    const token = jwt.sign(
+                        { id: user.id, name: user.name, type: user.type },
+                        "jwt-secret-key",
+                        { expiresIn: '1d' }
+                    );
+                    return res.json({ 
+                        Status: "Exito", 
+                        name: user.name, 
+                        type: user.type, 
+                        token 
+                    });
                 } else {
-                    console.log("Wrong Password");
-                    return res.json({ Error: "Wrong Password" });
+                    return res.status(401).json({ Error: "Contraseña incorrecta" });
                 }
             });
         } else {
-            console.log("Email no encontrado");
-            return res.json({ Error: "Este email no existe" });
+            return res.status(404).json({ Error: "Este email no existe" });
         }
     });
 });
+
 
 app.get('/', verifyUser, (req, res) => {
     return res.json({ Status: "Exito", id: req.userId, name: req.userName, type: req.userType });
@@ -127,9 +134,13 @@ app.post('/register', (req, res) => {
 
 // Verificacion de Logout
 app.get('/logout', (req, res) => {
+    // Limpiar cookies si existen
     res.clearCookie('token', { path: '/' });
-    return res.json({ Status: "Exito" });
+
+    // Respuesta al cliente
+    return res.json({ Status: "Exito", Message: "Sesión cerrada correctamente" });
 });
+
 
 app.get('/report/:sku', (req, res) => {
     const sku = req.params.sku;
