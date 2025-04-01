@@ -131,7 +131,6 @@ app.post('/register', (req, res) => {
     });
 });
 
-
 // Verificacion de Logout
 app.get('/logout', (req, res) => {
     // Limpiar cookies si existen
@@ -145,82 +144,75 @@ app.get('/logout', (req, res) => {
 app.get('/report/:sku', (req, res) => {
     const sku = req.params.sku;
 
-    // Query para obtener la información del reporte principal
-    const reportQuery = `
-        SELECT * FROM reports WHERE sku = ?
-    `;
+    const reportQuery = `SELECT * FROM reports WHERE sku = ?`;
 
     db.query(reportQuery, [sku], (err, reportResult) => {
-        if (err) {
-            console.error('Error al obtener el reporte:', err);
-            return res.status(500).json({ Error: 'Error al obtener el reporte' });
-        }
-
-        if (reportResult.length === 0) {
-            return res.status(404).json({ Error: 'Este modelo no está en la base de datos' });
-        }
+        if (err) return res.status(500).json({ Error: 'Error al obtener el reporte' });
+        if (reportResult.length === 0) return res.status(404).json({ Error: 'Modelo no encontrado' });
 
         const report = reportResult[0];
 
-        console.log('Consulta del reporte:', report);
-
-        // Verificar si es marca Scion Instruments y modelo LC6000
-        if (report.brand === 'Scion Instruments' && report.model === 'LC6000') {
-            // Query para obtener los módulos relacionados con el reporte
-            const modulesQuery = `
-                SELECT * FROM modules WHERE report_id = ?
-            `;
-
-            db.query(modulesQuery, [report.id], (err, modulesResult) => {
-                if (err) {
-                    console.error('Error al obtener los módulos:', err);
-                    return res.status(500).json({ Error: 'Error al obtener los módulos' });
-                }
-
-                console.log('Consulta de módulos:', modulesResult);
-
-                return res.status(200).json({
-                    Status: 'Exito',
-                    Report: report,
-                    Modules: modulesResult, // Enviar módulos para LC6000
-                });
-            });
-        } else {
-            // Consultar canales y sampler para otros modelos
-            const channelsQuery = `
-                SELECT * FROM channels WHERE report_id = ?
-            `;
-            const samplersQuery = `
-                SELECT * FROM samplers WHERE report_id = ?
-            `;
-
-            db.query(channelsQuery, [report.id], (err, channelsResult) => {
-                if (err) {
-                    console.error('Error al obtener los canales:', err);
-                    return res.status(500).json({ Error: 'Error al obtener los canales' });
-                }
-
-                console.log('Consulta de canales:', channelsResult);
-
-                db.query(samplersQuery, [report.id], (err, samplersResult) => {
-                    if (err) {
-                        console.error('Error al obtener los samplers:', err);
-                        return res.status(500).json({ Error: 'Error al obtener los samplers' });
-                    }
-
-                    console.log('Consulta de samplers:', samplersResult);
-
+        const sendReport = () => {
+            if (report.brand === 'Scion Instruments' && report.model === 'LC6000') {
+                const modulesQuery = `SELECT * FROM modules WHERE report_id = ?`;
+                db.query(modulesQuery, [report.id], (err, modulesResult) => {
+                    if (err) return res.status(500).json({ Error: 'Error al obtener módulos' });
                     return res.status(200).json({
                         Status: 'Exito',
                         Report: report,
-                        Channels: channelsResult, // Enviar canales para otros modelos
-                        Samplers: samplersResult, // Enviar todos los samplers
+                        Modules: modulesResult,
+                        isPublic: report.image_uploaded === 1
                     });
                 });
+            } else {
+                const channelsQuery = `SELECT * FROM channels WHERE report_id = ?`;
+                const samplersQuery = `SELECT * FROM samplers WHERE report_id = ?`;
+
+                db.query(channelsQuery, [report.id], (err, channelsResult) => {
+                    if (err) return res.status(500).json({ Error: 'Error al obtener canales' });
+
+                    db.query(samplersQuery, [report.id], (err, samplersResult) => {
+                        if (err) return res.status(500).json({ Error: 'Error al obtener samplers' });
+
+                        return res.status(200).json({
+                            Status: 'Exito',
+                            Report: report,
+                            Channels: channelsResult,
+                            Samplers: samplersResult,
+                            isPublic: report.image_uploaded === 1
+                        });
+                    });
+                });
+            }
+        };
+
+        if (report.image_uploaded === 1) {
+            // ✅ Sin autenticación
+            return sendReport();
+        } else {
+            // 🔒 Requiere autenticación
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                return res.status(401).json({ Error: "Se requiere autenticación de lado del backend", AuthRequired: true });
+            }
+
+            const token = authHeader.split(' ')[1];
+            if (!token) {
+                return res.status(401).json({ Error: "Token no proporcionado", AuthRequired: true });
+            }
+
+            jwt.verify(token, "jwt-secret-key", (err, decoded) => {
+                if (err) {
+                    return res.status(401).json({ Error: "Token inválido", AuthRequired: true });
+                }
+
+                // ✅ Autenticado
+                return sendReport();
             });
         }
     });
 });
+
 
 app.post('/report/upload-temp/:sku', verifyUser, upload.any(), (req, res) => {
     const sku = req.params.sku;
