@@ -31,10 +31,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // development
-const serviceAccount = JSON.parse(fs.readFileSync('./firebase-service-account.json', 'utf8'));
+//const serviceAccount = JSON.parse(fs.readFileSync('./firebase-service-account.json', 'utf8'));
 
 // Production
-//const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
