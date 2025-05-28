@@ -31,10 +31,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // development
-//const serviceAccount = JSON.parse(fs.readFileSync('./firebase-service-account.json', 'utf8'));
+const serviceAccount = JSON.parse(fs.readFileSync('./firebase-service-account.json', 'utf8'));
 
 // Production
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+//const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
@@ -531,7 +531,7 @@ app.get('/admin/reports', verifyUser, (req, res) => {
     }
 
     const sql = `
-        SELECT r.sku, r.upload_date, r.image_name, r.image_uploaded, r.user_id, l.name, l.email, l.type 
+        SELECT r.sku, r.upload_date, r.image_name, r.image_uploaded, r.user_id, l.name, l.email, l.type, l.region
         FROM reports r 
         JOIN login l ON r.user_id = l.id
         ORDER BY r.upload_date DESC
