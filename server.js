@@ -19,7 +19,7 @@ const app = express();
 app.use(express.json());
 app.use(cors({
     origin: ["http://localhost:3000", "https://app-techcomp-16ff4d30c364.herokuapp.com", "https://front-techcomp.rkcreativo.com.mx", "https://chromatographyservices.com"],
-    methods: ["POST", "GET"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true
 }));
 app.use(cookieParser());
@@ -113,23 +113,31 @@ app.get('/', verifyUser, (req, res) => {
 });
 
 app.post('/register', (req, res) => {
-    const sql = "INSERT INTO login (name, email, password, distributor, region, type) VALUES (?, ?, ?, ?, ?, ?)";
+    const sql =
+        'INSERT INTO login (name, email, password, distributor, region, type) VALUES (?, ?, ?, ?, ?, ?)';
+
     bcrypt.hash(req.body.password.toString(), salt, (err, hash) => {
-        if (err) return res.json({ Error: "Error cifrar contraseña" });
+        if (err) return res.json({ Error: 'Error cifrar contraseña' });
+
         const values = [
-            req.body.name,
-            req.body.email,
-            hash,
-            null, // distributor como NULL
-            null, // region como NULL
-            req.body.type
+        req.body.name,
+        req.body.email,
+        hash,
+        req.body.distributor || null, // distributor desde el body
+        req.body.region || null,      // region desde el body
+        req.body.type
         ];
+
         db.query(sql, values, (err, result) => {
-            if (err) return res.json({ Error: "Insertar datos en el servidor" });
-            return res.json({ Status: "Exito" });
+        if (err) {
+            console.error(err);
+            return res.json({ Error: 'Insertar datos en el servidor' });
+        }
+        return res.json({ Status: 'Exito' });
         });
     });
 });
+
 
 // Verificacion de Logout
 app.get('/logout', (req, res) => {
@@ -554,6 +562,215 @@ app.get('/admin/reports', verifyUser, (req, res) => {
         return res.json({ Status: "Exito", Data: data });
     });
 });
+
+app.get('/dashboard/stats', verifyUser, (req, res) => {
+    const sql = `
+        SELECT 
+        COUNT(DISTINCT user_id) AS totalUsers,
+        SUM(CASE WHEN image_uploaded = 1 THEN 1 ELSE 0 END) AS totalUploaded,
+        COUNT(*) AS totalReports
+        FROM reports;
+    `;
+
+    db.query(sql, (err, result) => {
+        if (err) {
+        console.error(err);
+        return res.status(500).json({ Error: 'Error al obtener estadísticas del dashboard' });
+        }
+
+        const row = result[0] || { totalUsers: 0, totalUploaded: 0, totalReports: 0 };
+
+        return res.json({
+        Status: 'Exito',
+        totalUsers: row.totalUsers,
+        totalUploaded: row.totalUploaded,
+        totalReports: row.totalReports
+        });
+    });
+});
+
+// Obtener perfil del usuario autenticado
+app.get('/profile', verifyUser, (req, res) => {
+    const sql = `
+        SELECT id, name, email, distributor, region, type
+        FROM login
+        WHERE id = ?
+        LIMIT 1
+    `;
+
+    db.query(sql, [req.userId], (err, result) => {
+        if (err) {
+        console.error(err);
+        return res.status(500).json({ Status: 'Error', Error: 'Error al obtener el perfil' });
+        }
+
+        if (result.length === 0) {
+        return res.status(404).json({ Status: 'Error', Error: 'Usuario no encontrado' });
+        }
+
+        const user = result[0];
+
+        return res.json({
+        Status: 'Exito',
+        Profile: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            distributor: user.distributor,
+            region: user.region,
+            type: user.type
+        }
+        });
+    });
+});
+
+// Activity del usuario: reports relacionados al usuario autenticado
+// Activity del usuario: reports relacionados al usuario autenticado
+app.get('/profile/activity', verifyUser, (req, res) => {
+    const sql = `
+        SELECT 
+        r.id,
+        r.sku,
+        r.upload_date,
+        r.image_uploaded,
+        r.user_id,
+        l.name,
+        l.email,
+        l.region
+        FROM reports r
+        JOIN login l ON r.user_id = l.id
+        WHERE r.user_id = ?
+        ORDER BY r.upload_date DESC
+    `;
+
+    db.query(sql, [req.userId], (err, result) => {
+        if (err) {
+        console.error(err);
+        return res
+            .status(500)
+            .json({ Status: 'Error', Error: 'Error al obtener la actividad del usuario' });
+        }
+
+        return res.json({
+        Status: 'Exito',
+        Activity: result
+        });
+    });
+});
+
+// Listado de usuarios (solo admin)
+app.get('/users', verifyUser, (req, res) => {
+  // si limitas a admin:
+  // if (req.userType !== 'admin') {
+  //   return res.status(403).json({ Status: 'Error', Error: 'Not authorized' });
+  // }
+
+  const sql = `
+    SELECT 
+      id,
+      name,
+      email,
+      distributor,
+      region,
+      type
+    FROM login
+    ORDER BY name ASC
+  `;
+
+  db.query(sql, (err, result) => {
+    if (err) {
+      console.error(err);
+      return res
+        .status(500)
+        .json({ Status: 'Error', Error: 'Error fetching users' });
+    }
+
+    return res.json({
+      Status: 'Exito',
+      Users: result
+    });
+  });
+});
+
+// Actualizar usuario
+app.put('/users/:id', verifyUser, (req, res) => {
+    // Opcional: solo admin
+    if (req.userType !== 'admin') {
+        return res.status(403).json({ Status: 'Error', Error: 'Not authorized' });
+    }
+
+    const { name, email, distributor, region, type } = req.body;
+    const userId = req.params.id;
+
+    const sql = `
+        UPDATE login
+        SET name = ?, email = ?, distributor = ?, region = ?, type = ?
+        WHERE id = ?
+    `;
+
+    db.query(
+        sql,
+        [name, email, distributor || null, region || null, type, userId],
+        (err, result) => {
+        if (err) {
+            console.error(err);
+            return res
+            .status(500)
+            .json({ Status: 'Error', Error: 'Error updating user' });
+        }
+
+        return res.json({ Status: 'Exito' });
+        }
+    );
+});
+
+// Eliminar usuario
+app.delete('/users/:id', verifyUser, (req, res) => {
+  // Opcional: solo admin
+  if (req.userType !== 'admin') {
+    return res.status(403).json({ Status: 'Error', Error: 'Not authorized' });
+  }
+
+  const userId = req.params.id;
+
+  // Primero eliminar reports asociados (si existen)
+  const deleteReportsSql = 'DELETE FROM reports WHERE user_id = ?';
+  db.query(deleteReportsSql, [userId], (err) => {
+    if (err) {
+      console.error('Error deleting user reports:', err);
+      return res
+        .status(500)
+        .json({ Status: 'Error', Error: 'Error deleting user reports' });
+    }
+
+    // Ahora sí eliminar el usuario
+    const deleteUserSql = 'DELETE FROM login WHERE id = ?';
+    db.query(deleteUserSql, [userId], (err2, result2) => {
+      if (err2) {
+        console.error('Error deleting user:', err2);
+        return res
+          .status(500)
+          .json({ Status: 'Error', Error: 'Error deleting user' });
+      }
+
+      // Si no se afectó ninguna fila, el usuario no existía
+      if (result2.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ Status: 'Error', Error: 'User not found' });
+      }
+
+      return res.json({ Status: 'Exito' });
+    });
+  });
+});
+
+
+
+
+
+
+
 
 
 const PORT = process.env.PORT || 8080;
